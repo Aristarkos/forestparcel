@@ -1,0 +1,1627 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Metsavahti - Forest Watch</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ===== RESET & BASE ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --green: #2d6a4f;
+  --green-light: #52b788;
+  --green-bg: #d8f3dc;
+  --white: #ffffff;
+  --black: #1a1a1a;
+  --red: #e63946;
+  --gray-50: #f8f9fa;
+  --gray-100: #e9ecef;
+  --gray-200: #dee2e6;
+  --gray-300: #ced4da;
+  --gray-400: #adb5bd;
+  --gray-600: #6c757d;
+  --gray-800: #343a40;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.12);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.15);
+  --radius: 8px;
+  --sidebar-width: 360px;
+  --topbar-height: 52px;
+}
+html, body { height: 100%; font-family: 'Inter', system-ui, sans-serif; color: var(--black); background: var(--gray-50); }
+button { font-family: inherit; cursor: pointer; border: none; background: none; }
+input, select { font-family: inherit; }
+
+/* ===== LAYOUT ===== */
+.app { display: flex; flex-direction: column; height: 100vh; }
+.topbar {
+  height: var(--topbar-height); background: var(--green); color: var(--white);
+  display: flex; align-items: center; padding: 0 16px; gap: 12px; z-index: 1000;
+  box-shadow: var(--shadow-md); flex-shrink: 0;
+}
+.topbar-logo { font-size: 18px; font-weight: 700; letter-spacing: -0.5px; white-space: nowrap; }
+.topbar-logo span { font-weight: 400; opacity: 0.8; font-size: 13px; margin-left: 6px; }
+.topbar-spacer { flex: 1; }
+.topbar-input-group { display: flex; align-items: center; gap: 6px; }
+.topbar-input-group label { font-size: 12px; opacity: 0.85; white-space: nowrap; }
+.topbar-input-group input {
+  padding: 5px 10px; border: 1px solid rgba(255,255,255,0.3); border-radius: 4px;
+  background: rgba(255,255,255,0.15); color: var(--white); font-size: 13px; width: 220px;
+}
+.topbar-input-group input::placeholder { color: rgba(255,255,255,0.5); }
+.topbar-input-group input:focus { outline: none; border-color: rgba(255,255,255,0.6); background: rgba(255,255,255,0.25); }
+.btn-lang {
+  padding: 4px 10px; border: 1px solid rgba(255,255,255,0.4); border-radius: 4px;
+  color: var(--white); font-size: 12px; font-weight: 600; transition: background 0.15s;
+}
+.btn-lang:hover { background: rgba(255,255,255,0.15); }
+.btn-lang.active { background: rgba(255,255,255,0.25); }
+
+.main-container { display: flex; flex: 1; overflow: hidden; position: relative; }
+
+/* ===== SIDEBAR ===== */
+.sidebar {
+  width: var(--sidebar-width); background: var(--white); border-right: 1px solid var(--gray-200);
+  display: flex; flex-direction: column; overflow: hidden; transition: margin-left 0.3s ease;
+  z-index: 800; flex-shrink: 0;
+}
+.sidebar.collapsed { margin-left: calc(-1 * var(--sidebar-width)); }
+.sidebar-toggle {
+  position: absolute; left: var(--sidebar-width); top: 10px; z-index: 900;
+  width: 28px; height: 48px; background: var(--white); border: 1px solid var(--gray-200);
+  border-left: none; border-radius: 0 6px 6px 0; display: flex; align-items: center;
+  justify-content: center; font-size: 14px; color: var(--gray-600); box-shadow: var(--shadow-sm);
+  transition: left 0.3s ease;
+}
+.sidebar.collapsed + .sidebar-toggle { left: 0; }
+.sidebar-toggle:hover { background: var(--gray-50); color: var(--black); }
+
+.sidebar-section { padding: 16px; border-bottom: 1px solid var(--gray-100); }
+.sidebar-section h3 { font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--gray-600); margin-bottom: 10px; }
+
+/* Add parcel form */
+.add-parcel-form { display: flex; gap: 6px; margin-bottom: 8px; }
+.add-parcel-form input {
+  flex: 1; padding: 7px 10px; border: 1px solid var(--gray-300); border-radius: 4px;
+  font-size: 13px; min-width: 0;
+}
+.add-parcel-form input:focus { outline: none; border-color: var(--green); box-shadow: 0 0 0 2px rgba(45,106,79,0.15); }
+.btn-add {
+  padding: 7px 12px; background: var(--green); color: var(--white); border-radius: 4px;
+  font-size: 13px; font-weight: 600; white-space: nowrap; transition: background 0.15s;
+}
+.btn-add:hover { background: #245a42; }
+.btn-add:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Parcel list */
+.parcel-list { display: flex; flex-direction: column; gap: 6px; }
+.parcel-item {
+  display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid var(--gray-200);
+  border-radius: 6px; cursor: pointer; transition: all 0.15s;
+}
+.parcel-item:hover { border-color: var(--green); background: var(--green-bg); }
+.parcel-item.active { border-color: var(--green); background: var(--green-bg); }
+.parcel-item-color { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+.parcel-item-info { flex: 1; min-width: 0; }
+.parcel-item-name { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.parcel-item-id { font-size: 11px; color: var(--gray-600); }
+.parcel-item-area { font-size: 11px; color: var(--gray-600); }
+.btn-remove {
+  width: 24px; height: 24px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+  color: var(--gray-400); font-size: 16px; transition: all 0.15s; flex-shrink: 0;
+}
+.btn-remove:hover { background: rgba(230,57,70,0.1); color: var(--red); }
+
+/* Scrollable area */
+.sidebar-scroll { flex: 1; overflow-y: auto; }
+.sidebar-scroll::-webkit-scrollbar { width: 6px; }
+.sidebar-scroll::-webkit-scrollbar-thumb { background: var(--gray-300); border-radius: 3px; }
+
+/* Charts & tables */
+.chart-container { position: relative; width: 100%; height: 220px; margin-top: 8px; }
+.stats-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+.stats-table th { text-align: left; padding: 6px 8px; background: var(--gray-50); border-bottom: 2px solid var(--gray-200); font-weight: 600; color: var(--gray-600); cursor: pointer; user-select: none; }
+.stats-table th:hover { color: var(--black); }
+.stats-table td { padding: 5px 8px; border-bottom: 1px solid var(--gray-100); }
+.stats-table tr:hover td { background: var(--green-bg); }
+
+/* Measurement tools bar */
+.measure-bar {
+  display: flex; gap: 4px; padding: 8px; background: var(--white); border-bottom: 1px solid var(--gray-100);
+}
+.btn-measure {
+  padding: 5px 10px; border: 1px solid var(--gray-200); border-radius: 4px; font-size: 12px;
+  color: var(--gray-600); transition: all 0.15s; display: flex; align-items: center; gap: 4px;
+}
+.btn-measure:hover { border-color: var(--green); color: var(--green); }
+.btn-measure.active { background: var(--green); color: var(--white); border-color: var(--green); }
+.btn-measure svg { width: 14px; height: 14px; }
+
+/* Export buttons */
+.export-bar { display: flex; gap: 6px; padding: 12px 16px; border-top: 1px solid var(--gray-200); }
+.btn-export {
+  flex: 1; padding: 8px; border: 1px solid var(--gray-200); border-radius: 4px; font-size: 12px;
+  font-weight: 600; color: var(--gray-600); transition: all 0.15s; text-align: center;
+}
+.btn-export:hover { border-color: var(--green); color: var(--green); background: var(--green-bg); }
+
+/* ===== MAP ===== */
+.map-wrap { flex: 1; position: relative; }
+#map { width: 100%; height: 100%; background: var(--gray-100); }
+
+/* Coordinate display */
+.coord-display {
+  position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); z-index: 800;
+  background: rgba(255,255,255,0.92); padding: 4px 12px; border-radius: 4px;
+  font-size: 11px; color: var(--gray-600); box-shadow: var(--shadow-sm); pointer-events: none;
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+
+/* Measurement result popup */
+.measure-result {
+  position: absolute; top: 10px; right: 10px; z-index: 800;
+  background: var(--white); padding: 10px 16px; border-radius: 6px;
+  box-shadow: var(--shadow-md); font-size: 13px; display: none;
+}
+.measure-result .value { font-weight: 700; color: var(--red); font-size: 16px; }
+.measure-result .btn-close-measure {
+  position: absolute; top: 4px; right: 8px; font-size: 16px; color: var(--gray-400);
+}
+
+/* Historical imagery slider */
+.swipe-container { position: absolute; top: 0; left: 0; right: 0; bottom: 0; z-index: 700; pointer-events: none; display: none; }
+.swipe-handle {
+  position: absolute; top: 0; bottom: 0; width: 4px; background: var(--red); cursor: ew-resize;
+  pointer-events: all; z-index: 710;
+}
+.swipe-handle::after {
+  content: ''; position: absolute; top: 50%; left: -14px; width: 32px; height: 32px;
+  background: var(--white); border: 2px solid var(--red); border-radius: 50%;
+  transform: translateY(-50%); box-shadow: var(--shadow-md);
+}
+.swipe-label {
+  position: absolute; top: 10px; padding: 4px 10px; background: rgba(0,0,0,0.7);
+  color: var(--white); font-size: 12px; font-weight: 600; border-radius: 4px;
+  pointer-events: none;
+}
+.swipe-label-left { right: calc(100% - var(--swipe-pos, 50%) + 10px); }
+.swipe-label-right { left: calc(var(--swipe-pos, 50%) + 10px); }
+
+/* Loading spinner */
+.spinner {
+  display: inline-block; width: 16px; height: 16px; border: 2px solid var(--gray-200);
+  border-top-color: var(--green); border-radius: 50%; animation: spin 0.6s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-overlay {
+  position: absolute; inset: 0; background: rgba(255,255,255,0.7); display: flex;
+  align-items: center; justify-content: center; z-index: 999;
+}
+
+/* Error / info messages */
+.msg { padding: 8px 12px; border-radius: 4px; font-size: 12px; margin-top: 8px; }
+.msg-error { background: #fce4ec; color: #c62828; border: 1px solid #ef9a9a; }
+.msg-info { background: #e3f2fd; color: #1565c0; border: 1px solid #90caf9; }
+.msg-success { background: #e8f5e9; color: #2e7d32; border: 1px solid #a5d6a7; }
+
+/* Neighbor popup */
+.leaflet-popup-content { font-family: 'Inter', system-ui, sans-serif; font-size: 13px; }
+.neighbor-popup b { color: var(--green); }
+
+/* Historical imagery controls */
+.historical-controls { padding: 12px 16px; }
+.year-slider-wrap { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.year-slider-wrap input[type=range] { flex: 1; accent-color: var(--green); }
+.year-slider-wrap .year-label { font-size: 14px; font-weight: 700; color: var(--green); min-width: 40px; text-align: center; }
+.btn-swipe {
+  margin-top: 8px; padding: 6px 12px; background: var(--green); color: var(--white);
+  border-radius: 4px; font-size: 12px; font-weight: 600; width: 100%;
+}
+.btn-swipe:hover { background: #245a42; }
+.btn-swipe:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Leaflet layer control customization */
+.leaflet-control-layers { font-family: 'Inter', system-ui, sans-serif; font-size: 13px; }
+
+/* Responsive */
+@media (max-width: 768px) {
+  .sidebar { position: absolute; left: 0; top: 0; bottom: 0; z-index: 900; box-shadow: var(--shadow-md); }
+  .sidebar.collapsed { margin-left: calc(-1 * var(--sidebar-width)); }
+  .sidebar-toggle { z-index: 901; }
+  .topbar-input-group input { width: 140px; }
+}
+</style>
+</head>
+<body>
+<div class="app">
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <div class="topbar-logo">Metsavahti<span data-i18n="subtitle">Metsanvalvonta</span></div>
+    <div class="topbar-spacer"></div>
+    <div class="topbar-input-group">
+      <label data-i18n="apiKeyLabel">MML API-avain:</label>
+      <input type="text" id="apiKeyInput" placeholder="Syota API-avain..." data-i18n-placeholder="apiKeyPlaceholder">
+    </div>
+    <button class="btn-lang" id="btnLangFi" title="Suomi">FI</button>
+    <button class="btn-lang" id="btnLangEn" title="English">EN</button>
+  </div>
+
+  <!-- MAIN -->
+  <div class="main-container">
+    <!-- SIDEBAR -->
+    <div class="sidebar" id="sidebar">
+      <div class="sidebar-section">
+        <h3 data-i18n="parcelsTitle">Kiinteistot</h3>
+        <div class="add-parcel-form">
+          <input type="text" id="parcelIdInput" placeholder="049-401-1-123" data-i18n-placeholder="parcelIdPlaceholder">
+          <input type="text" id="parcelNameInput" placeholder="Nimi (valinnainen)" data-i18n-placeholder="parcelNamePlaceholder" style="width:100px;">
+          <button class="btn-add" id="btnAddParcel" data-i18n="addBtn">Lisa</button>
+        </div>
+        <div id="parcelMsg"></div>
+        <div class="parcel-list" id="parcelList"></div>
+      </div>
+
+      <div class="sidebar-scroll">
+        <!-- Neighbors -->
+        <div class="sidebar-section" id="neighborsSection" style="display:none;">
+          <h3 data-i18n="neighborsTitle">Naapuripalstat</h3>
+          <div id="neighborsList" style="font-size:12px; color: var(--gray-600);"></div>
+        </div>
+
+        <!-- Price chart -->
+        <div class="sidebar-section" id="priceSection" style="display:none;">
+          <h3 data-i18n="priceTitle">Metsatilastohinnat</h3>
+          <div id="priceInfo" style="font-size:12px; color:var(--gray-600); margin-bottom:6px;"></div>
+          <div class="chart-container">
+            <canvas id="priceChart"></canvas>
+          </div>
+        </div>
+
+        <!-- Stats table -->
+        <div class="sidebar-section" id="statsSection" style="display:none;">
+          <h3 data-i18n="statsTitle">Hintatilastot</h3>
+          <table class="stats-table" id="statsTable">
+            <thead>
+              <tr>
+                <th data-sort="year" data-i18n="colYear">Vuosi</th>
+                <th data-sort="median" data-i18n="colMedian">Mediaani EUR/ha</th>
+                <th data-sort="avg" data-i18n="colAvg">Keskiarvo EUR/ha</th>
+                <th data-sort="count" data-i18n="colCount">Kauppoja</th>
+              </tr>
+            </thead>
+            <tbody id="statsBody"></tbody>
+          </table>
+          <div class="msg msg-info" style="margin-top:8px;">
+            <span data-i18n="statsNote">Huom: Yksittaiset kauppatiedot tulossa kevaalla 2026.</span>
+          </div>
+        </div>
+
+        <!-- Historical imagery -->
+        <div class="sidebar-section" id="historicalSection" style="display:none;">
+          <h3 data-i18n="historicalTitle">Historialliset ilmakuvat</h3>
+          <div class="historical-controls">
+            <div style="font-size:12px; color:var(--gray-600);" data-i18n="historicalDesc">Valitse vuosi ja vertaa nykyiseen ilmakuvaan.</div>
+            <div class="year-slider-wrap">
+              <span style="font-size:11px;">2008</span>
+              <input type="range" id="yearSlider" min="2008" max="2025" value="2020" step="1">
+              <span class="year-label" id="yearLabel">2020</span>
+            </div>
+            <button class="btn-swipe" id="btnLoadHistorical" data-i18n="loadHistorical">Lataa ilmakuva</button>
+            <button class="btn-swipe" id="btnSwipeCompare" data-i18n="swipeCompare" style="margin-top:4px; background:var(--gray-800);" disabled>Pyyhkaisyvertailu</button>
+          </div>
+        </div>
+
+        <!-- Measurement tools -->
+        <div class="sidebar-section">
+          <h3 data-i18n="measureTitle">Mittaustyokalut</h3>
+          <div class="measure-bar">
+            <button class="btn-measure" id="btnMeasureDist" title="Mittaa etaisyys">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20L20 4"/><circle cx="4" cy="20" r="2"/><circle cx="20" cy="4" r="2"/></svg>
+              <span data-i18n="distance">Etaisyys</span>
+            </button>
+            <button class="btn-measure" id="btnMeasureArea" title="Mittaa pinta-ala">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="4,20 12,4 20,20"/></svg>
+              <span data-i18n="area">Pinta-ala</span>
+            </button>
+            <button class="btn-measure" id="btnMeasureClear" title="Tyhjenna">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              <span data-i18n="clear">Tyhjenna</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Export bar -->
+      <div class="export-bar">
+        <button class="btn-export" id="btnExportPdf" data-i18n="exportPdf">PDF-raportti</button>
+        <button class="btn-export" id="btnExportCsv" data-i18n="exportCsv">CSV-vienti</button>
+      </div>
+    </div>
+
+    <!-- Sidebar toggle -->
+    <button class="sidebar-toggle" id="sidebarToggle">&#9776;</button>
+
+    <!-- MAP -->
+    <div class="map-wrap">
+      <div id="map"></div>
+      <div class="coord-display" id="coordDisplay">--</div>
+      <div class="measure-result" id="measureResult">
+        <button class="btn-close-measure" id="btnCloseMeasure">&times;</button>
+        <div id="measureLabel"></div>
+        <div class="value" id="measureValue"></div>
+      </div>
+      <!-- Swipe container for historical comparison -->
+      <div class="swipe-container" id="swipeContainer">
+        <div class="swipe-handle" id="swipeHandle"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CDN JS -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.2/proj4.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/proj4leaflet/1.0.2/proj4leaflet.min.js"></script>
+<script src="https://unpkg.com/leaflet-mml-layers@3.0.1/dist/leaflet-mml-layers.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+<script>
+(function() {
+'use strict';
+
+// ============================================================
+// 1. CONFIG & CONSTANTS
+// ============================================================
+const CONFIG = {
+  colors: {
+    parcel: '#2d6a4f',
+    parcelFill: 'rgba(45,106,79,0.15)',
+    neighbor: '#52b788',
+    neighborFill: 'rgba(82,183,136,0.1)',
+    selected: '#e63946',
+    selectedFill: 'rgba(230,57,70,0.15)',
+    measure: '#e63946',
+  },
+  api: {
+    parcel: 'https://avoin-paikkatieto.maanmittauslaitos.fi/kiinteisto-avoin/simple-features/v3/collections/PalstanSijaintitiedot/items',
+    khr: 'https://khr.maanmittauslaitos.fi/tilastopalvelu/rest/1.1/indicators',
+    wcs: 'https://avoin-karttakuva.maanmittauslaitos.fi/ortokuvat-ja-korkeusmallit/wcs/v2',
+  },
+  khrIndicators: { median: '4304', avg: '4303', count: '4306', medianAll: '4305' },
+  defaultCenter: [61.5, 24.0],
+  defaultZoom: 7,
+};
+
+// ============================================================
+// 2. I18N DICTIONARY
+// ============================================================
+const I18N = {
+  fi: {
+    subtitle: 'Metsanvalvonta',
+    apiKeyLabel: 'MML API-avain:',
+    apiKeyPlaceholder: 'Syota API-avain...',
+    parcelsTitle: 'Kiinteistot',
+    parcelIdPlaceholder: '049-401-1-123',
+    parcelNamePlaceholder: 'Nimi (valinnainen)',
+    addBtn: 'Lisaa',
+    neighborsTitle: 'Naapuripalstat',
+    priceTitle: 'Metsatilastohinnat',
+    statsTitle: 'Hintatilastot',
+    statsNote: 'Huom: Yksittaiset kauppatiedot tulossa kevaalla 2026.',
+    historicalTitle: 'Historialliset ilmakuvat',
+    historicalDesc: 'Valitse vuosi ja vertaa nykyiseen ilmakuvaan.',
+    loadHistorical: 'Lataa ilmakuva',
+    swipeCompare: 'Pyyhkaisyvertailu',
+    measureTitle: 'Mittaustyokalut',
+    distance: 'Etaisyys',
+    area: 'Pinta-ala',
+    clear: 'Tyhjenna',
+    exportPdf: 'PDF-raportti',
+    exportCsv: 'CSV-vienti',
+    colYear: 'Vuosi',
+    colMedian: 'Mediaani EUR/ha',
+    colAvg: 'Keskiarvo EUR/ha',
+    colCount: 'Kauppoja',
+    errorNoKey: 'Syota ensin MML API-avain.',
+    errorNoId: 'Syota kiinteistotunnus.',
+    errorNotFound: 'Kiinteistoa ei loytynyt.',
+    errorFetch: 'Tietojen haku epaonnistui.',
+    errorCors: 'CORS-virhe: API ei salli selainkyselyita. Kokeile myohemmin.',
+    added: 'Kiinteisto lisatty.',
+    loading: 'Ladataan...',
+    loadingPrice: 'Ladataan hintatietoja...',
+    noData: 'Ei tietoja.',
+    priceFor: 'Hintatilasto kunnalle',
+    measureDist: 'Etaisyys:',
+    measureArea: 'Pinta-ala:',
+    neighborLabel: 'Naapuripalsta',
+    parcelLabel: 'Kiinteistotunnus',
+    areaLabel: 'Pinta-ala',
+    hectares: 'ha',
+    pdfTitle: 'Metsavahti - Raportti',
+    csvFilename: 'metsavahti_hintatilasto.csv',
+    swipeLeft: 'Nykyinen',
+    swipeRight: 'Historiallinen',
+    clickToMeasure: 'Klikkaa karttaa mitattaksesi. Tuplaklikki lopettaa.',
+    removedParcel: 'Kiinteisto poistettu.',
+    neighborsLoaded: 'naapuripalstaa ladattu.',
+    noNeighbors: 'Ei naapuripalstoja.',
+    historicalLoading: 'Ladataan historiallista ilmakuvaa...',
+    historicalLoaded: 'Ilmakuva ladattu.',
+    historicalError: 'Ilmakuvan lataus epaonnistui.',
+    pdfGenerating: 'Luodaan PDF...',
+    pdfDone: 'PDF valmis.',
+  },
+  en: {
+    subtitle: 'Forest Watch',
+    apiKeyLabel: 'MML API key:',
+    apiKeyPlaceholder: 'Enter API key...',
+    parcelsTitle: 'Properties',
+    parcelIdPlaceholder: '049-401-1-123',
+    parcelNamePlaceholder: 'Name (optional)',
+    addBtn: 'Add',
+    neighborsTitle: 'Neighbor parcels',
+    priceTitle: 'Forest price statistics',
+    statsTitle: 'Price statistics',
+    statsNote: 'Note: Individual transaction data coming Spring 2026.',
+    historicalTitle: 'Historical aerial imagery',
+    historicalDesc: 'Select a year and compare with current imagery.',
+    loadHistorical: 'Load aerial image',
+    swipeCompare: 'Swipe comparison',
+    measureTitle: 'Measurement tools',
+    distance: 'Distance',
+    area: 'Area',
+    clear: 'Clear',
+    exportPdf: 'PDF report',
+    exportCsv: 'CSV export',
+    colYear: 'Year',
+    colMedian: 'Median EUR/ha',
+    colAvg: 'Average EUR/ha',
+    colCount: 'Transactions',
+    errorNoKey: 'Please enter MML API key first.',
+    errorNoId: 'Please enter a property ID.',
+    errorNotFound: 'Property not found.',
+    errorFetch: 'Failed to fetch data.',
+    errorCors: 'CORS error: API does not allow browser requests. Try again later.',
+    added: 'Property added.',
+    loading: 'Loading...',
+    loadingPrice: 'Loading price data...',
+    noData: 'No data.',
+    priceFor: 'Price statistics for municipality',
+    measureDist: 'Distance:',
+    measureArea: 'Area:',
+    neighborLabel: 'Neighbor parcel',
+    parcelLabel: 'Property ID',
+    areaLabel: 'Area',
+    hectares: 'ha',
+    pdfTitle: 'Metsavahti - Report',
+    csvFilename: 'metsavahti_price_stats.csv',
+    swipeLeft: 'Current',
+    swipeRight: 'Historical',
+    clickToMeasure: 'Click the map to measure. Double-click to finish.',
+    removedParcel: 'Property removed.',
+    neighborsLoaded: 'neighbor parcels loaded.',
+    noNeighbors: 'No neighbor parcels.',
+    historicalLoading: 'Loading historical imagery...',
+    historicalLoaded: 'Image loaded.',
+    historicalError: 'Failed to load historical image.',
+    pdfGenerating: 'Generating PDF...',
+    pdfDone: 'PDF ready.',
+  }
+};
+
+let currentLang = 'fi';
+
+function t(key) {
+  return (I18N[currentLang] && I18N[currentLang][key]) || key;
+}
+
+function applyI18n() {
+  document.querySelectorAll('[data-i18n]').forEach(el => {
+    el.textContent = t(el.getAttribute('data-i18n'));
+  });
+  document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+    el.placeholder = t(el.getAttribute('data-i18n-placeholder'));
+  });
+  document.getElementById('btnLangFi').classList.toggle('active', currentLang === 'fi');
+  document.getElementById('btnLangEn').classList.toggle('active', currentLang === 'en');
+}
+
+// ============================================================
+// 3. HASHSTATE MODULE
+// ============================================================
+const HashState = {
+  encode(state) {
+    try {
+      const str = JSON.stringify(state);
+      return '#' + encodeURIComponent(btoa(unescape(encodeURIComponent(str))));
+    } catch { return ''; }
+  },
+  decode() {
+    try {
+      const hash = window.location.hash.slice(1);
+      if (!hash) return null;
+      const str = decodeURIComponent(escape(atob(decodeURIComponent(hash))));
+      return JSON.parse(str);
+    } catch { return null; }
+  },
+  save(state) {
+    const encoded = this.encode(state);
+    if (encoded) history.replaceState(null, '', encoded);
+  }
+};
+
+// ============================================================
+// 4. MML API MODULE
+// ============================================================
+const MmlApi = {
+  // Convert dash-separated display format (e.g. "49-401-1-123") to 14-digit API format ("04940100010123")
+  // Also accepts already-numeric 14-digit format as-is
+  toApiFormat(tunnus) {
+    const stripped = tunnus.trim();
+    // If already 14 digits with no dashes, return as-is
+    if (/^\d{14}$/.test(stripped)) return stripped;
+    // Split by dash
+    const parts = stripped.split('-');
+    if (parts.length !== 4) throw new Error('INVALID_FORMAT');
+    return parts[0].padStart(3, '0')
+         + parts[1].padStart(3, '0')
+         + parts[2].padStart(4, '0')
+         + parts[3].padStart(4, '0');
+  },
+
+  // Convert 14-digit API format back to dash display format
+  toDisplayFormat(apiTunnus) {
+    if (apiTunnus.includes('-')) return apiTunnus;
+    if (apiTunnus.length !== 14) return apiTunnus;
+    const m = parseInt(apiTunnus.slice(0, 3), 10);
+    const v = parseInt(apiTunnus.slice(3, 6), 10);
+    const g = parseInt(apiTunnus.slice(6, 10), 10);
+    const u = parseInt(apiTunnus.slice(10, 14), 10);
+    return `${m}-${v}-${g}-${u}`;
+  },
+
+  async fetchParcel(kiinteistotunnus, apiKey) {
+    const apiTunnus = this.toApiFormat(kiinteistotunnus);
+    const url = `${CONFIG.api.parcel}?kiinteistotunnus=${encodeURIComponent(apiTunnus)}&crs=http://www.opengis.net/def/crs/OGC/1.3/CRS84&api-key=${encodeURIComponent(apiKey)}`;
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    if (!data.features || data.features.length === 0) throw new Error('NOT_FOUND');
+    return data;
+  },
+
+  async fetchNeighbors(palstaId, apiKey) {
+    const url = `${CONFIG.api.parcel}?naapuripalstat=${encodeURIComponent(palstaId)}&crs=http://www.opengis.net/def/crs/OGC/1.3/CRS84&api-key=${encodeURIComponent(apiKey)}`;
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    return data;
+  }
+};
+
+// ============================================================
+// 5. KHR API MODULE (forest price statistics)
+// ============================================================
+const KhrApi = {
+  async fetchIndicator(indicator, municipalityCode, yearStart, yearEnd) {
+    const url = `${CONFIG.api.khr}/${indicator}/data?years=${yearStart}-${yearEnd}&regions=${municipalityCode}`;
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    return await resp.json();
+  },
+
+  async fetchForestPrices(municipalityCode) {
+    const yearStart = 2000;
+    const yearEnd = new Date().getFullYear();
+    const [medianData, avgData, countData] = await Promise.all([
+      this.fetchIndicator(CONFIG.khrIndicators.median, municipalityCode, yearStart, yearEnd).catch(() => null),
+      this.fetchIndicator(CONFIG.khrIndicators.avg, municipalityCode, yearStart, yearEnd).catch(() => null),
+      this.fetchIndicator(CONFIG.khrIndicators.count, municipalityCode, yearStart, yearEnd).catch(() => null),
+    ]);
+    return { median: medianData, avg: avgData, count: countData };
+  },
+
+  getMunicipalityCode(kiinteistotunnus) {
+    // Convert to 14-digit format first, then take first 3 digits
+    try {
+      const api = MmlApi.toApiFormat(kiinteistotunnus);
+      // Municipality code = first 3 digits, strip leading zeros for KHR API
+      return parseInt(api.slice(0, 3), 10).toString();
+    } catch {
+      // Fallback: first part before dash
+      return kiinteistotunnus.split('-')[0].replace(/^0+/, '') || '0';
+    }
+  },
+
+  parseIndicatorData(data) {
+    if (!data || !data.data) return [];
+    // data.data is typically { "year": value, ... } or array
+    const entries = [];
+    if (Array.isArray(data.data)) {
+      data.data.forEach(d => {
+        if (d.year != null && d.value != null) entries.push({ year: d.year, value: d.value });
+      });
+    } else if (typeof data.data === 'object') {
+      for (const [year, value] of Object.entries(data.data)) {
+        if (value != null) entries.push({ year: parseInt(year), value: parseFloat(value) });
+      }
+    }
+    return entries.sort((a, b) => a.year - b.year);
+  }
+};
+
+// ============================================================
+// 6. HISTORICAL IMAGERY MODULE (WCS)
+// ============================================================
+const HistoricalImagery = {
+  currentOverlay: null,
+
+  async loadImage(bounds, year, apiKey) {
+    // bounds = L.LatLngBounds in EPSG:4326
+    // Convert to EPSG:3067 for WCS request
+    const sw = bounds.getSouthWest();
+    const ne = bounds.getNorthEast();
+
+    // proj4 EPSG:3067 definition
+    if (!proj4.defs('EPSG:3067')) {
+      proj4.defs('EPSG:3067', '+proj=utm +zone=35 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs');
+    }
+    const swTm = proj4('EPSG:4326', 'EPSG:3067', [sw.lng, sw.lat]);
+    const neTm = proj4('EPSG:4326', 'EPSG:3067', [ne.lng, ne.lat]);
+
+    // Clamp to max 2000m
+    let eMin = Math.floor(swTm[0]);
+    let eMax = Math.ceil(neTm[0]);
+    let nMin = Math.floor(swTm[1]);
+    let nMax = Math.ceil(neTm[1]);
+
+    if (eMax - eMin > 2000) { const mid = (eMin + eMax) / 2; eMin = mid - 1000; eMax = mid + 1000; }
+    if (nMax - nMin > 2000) { const mid = (nMin + nMax) / 2; nMin = mid - 1000; nMax = mid + 1000; }
+
+    const timeStr = `${year}-12-31T00:00:00.000Z`;
+    const url = `${CONFIG.api.wcs}?service=WCS&version=2.0.1&request=GetCoverage` +
+      `&CoverageID=ortokuva_vari` +
+      `&SUBSET=E(${eMin},${eMax})&SUBSET=N(${nMin},${nMax})` +
+      `&SUBSET=time("${timeStr}")` +
+      `&format=image/png` +
+      `&api-key=${encodeURIComponent(apiKey)}`;
+
+    // Fetch as blob and create object URL
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error(`WCS HTTP ${resp.status}`);
+    const blob = await resp.blob();
+    const imageUrl = URL.createObjectURL(blob);
+
+    // Convert corners back to WGS84 for overlay bounds
+    const swWgs = proj4('EPSG:3067', 'EPSG:4326', [eMin, nMin]);
+    const neWgs = proj4('EPSG:3067', 'EPSG:4326', [eMax, nMax]);
+    const imageBounds = L.latLngBounds([swWgs[1], swWgs[0]], [neWgs[1], neWgs[0]]);
+
+    return { imageUrl, imageBounds };
+  },
+
+  clearOverlay(map) {
+    if (this.currentOverlay) {
+      map.removeLayer(this.currentOverlay);
+      this.currentOverlay = null;
+    }
+  }
+};
+
+// ============================================================
+// 7. MAP MANAGER
+// ============================================================
+let map, baseLayers, overlayLayers;
+
+const MapManager = {
+  init() {
+    // MML layers use EPSG:3067; leaflet-mml-layers sets up the CRS
+    try {
+      const mmlLayers = L.tileLayer.mml_wmts ? L.tileLayer : L;
+      // Create MML base layers
+      const taustakartta = L.tileLayer.mml_wmts({ layer: 'taustakartta' });
+      const maastokartta = L.tileLayer.mml_wmts({ layer: 'maastokartta' });
+      const ortokuva = L.tileLayer.mml_wmts({ layer: 'ortokuva' });
+
+      baseLayers = {
+        'Taustakartta': taustakartta,
+        'Maastokartta': maastokartta,
+        'Ortokuva': ortokuva,
+      };
+
+      // Kiinteistojaotus overlay
+      const kiinteistojaotus = L.tileLayer.mml_wmts({ layer: 'kiinteistojaotus' });
+      overlayLayers = {
+        'Kiinteistojaotus': kiinteistojaotus,
+      };
+
+      // Create map with MML CRS
+      map = L.map('map', {
+        crs: L.TileLayer.MML.crs,
+        center: CONFIG.defaultCenter,
+        zoom: CONFIG.defaultZoom,
+        layers: [taustakartta, kiinteistojaotus],
+        zoomControl: true,
+      });
+
+      L.control.layers(baseLayers, overlayLayers, { position: 'topright' }).addTo(map);
+    } catch (e) {
+      console.warn('MML layers failed, falling back to OSM:', e);
+      this.initFallback();
+    }
+
+    // Mouse move for coordinates
+    map.on('mousemove', (e) => {
+      const { lat, lng } = e.latlng;
+      let coordText = `WGS84: ${lat.toFixed(5)}, ${lng.toFixed(5)}`;
+      try {
+        if (!proj4.defs('EPSG:3067')) {
+          proj4.defs('EPSG:3067', '+proj=utm +zone=35 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs');
+        }
+        const tm = proj4('EPSG:4326', 'EPSG:3067', [lng, lat]);
+        coordText += `  |  ETRS-TM35FIN: ${Math.round(tm[0])}, ${Math.round(tm[1])}`;
+      } catch {}
+      document.getElementById('coordDisplay').textContent = coordText;
+    });
+  },
+
+  initFallback() {
+    // OSM fallback if MML layers fail
+    const osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      attribution: '&copy; OSM contributors',
+      maxZoom: 19,
+    });
+    baseLayers = { 'OpenStreetMap': osm };
+    overlayLayers = {};
+    map = L.map('map', {
+      center: CONFIG.defaultCenter,
+      zoom: CONFIG.defaultZoom,
+      layers: [osm],
+    });
+    L.control.layers(baseLayers, overlayLayers).addTo(map);
+  },
+
+  fitBounds(bounds, options) {
+    if (bounds && bounds.isValid()) {
+      map.fitBounds(bounds, { padding: [40, 40], maxZoom: 14, ...options });
+    }
+  }
+};
+
+// ============================================================
+// 8. PARCEL MANAGER
+// ============================================================
+const parcels = []; // { id, name, tunnus, geojson, layer, neighborLayer, bounds, municipalityCode }
+
+const ParcelManager = {
+  add(tunnus, name, geojsonData) {
+    const layer = L.geoJSON(geojsonData, {
+      style: {
+        color: CONFIG.colors.parcel,
+        weight: 3,
+        fillColor: CONFIG.colors.parcelFill,
+        fillOpacity: 0.15,
+        dashArray: null,
+      }
+    }).addTo(map);
+
+    const bounds = layer.getBounds();
+    const feature = geojsonData.features[0];
+    const props = feature ? feature.properties || {} : {};
+    const palstaId = props.kiinteistotunnus || props.palpisteId || (feature ? feature.id : null);
+
+    // Calculate area from properties or geometry
+    let areaHa = props.pinta_ala ? (props.pinta_ala / 10000).toFixed(2) : null;
+    if (!areaHa && props.pintaAla) areaHa = (props.pintaAla / 10000).toFixed(2);
+
+    const municipalityCode = KhrApi.getMunicipalityCode(tunnus);
+
+    const parcel = {
+      id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+      name: name || tunnus,
+      tunnus,
+      geojson: geojsonData,
+      layer,
+      neighborLayer: null,
+      bounds,
+      municipalityCode,
+      palstaId,
+      areaHa,
+    };
+
+    parcels.push(parcel);
+    return parcel;
+  },
+
+  remove(id) {
+    const idx = parcels.findIndex(p => p.id === id);
+    if (idx === -1) return;
+    const parcel = parcels[idx];
+    map.removeLayer(parcel.layer);
+    if (parcel.neighborLayer) map.removeLayer(parcel.neighborLayer);
+    parcels.splice(idx, 1);
+  },
+
+  getAll() { return parcels; },
+
+  getAllBounds() {
+    if (parcels.length === 0) return null;
+    const group = L.featureGroup(parcels.map(p => p.layer));
+    return group.getBounds();
+  },
+
+  highlight(id) {
+    parcels.forEach(p => {
+      if (p.id === id) {
+        p.layer.setStyle({ color: CONFIG.colors.selected, fillColor: CONFIG.colors.selectedFill, fillOpacity: 0.15, weight: 4 });
+      } else {
+        p.layer.setStyle({ color: CONFIG.colors.parcel, fillColor: CONFIG.colors.parcelFill, fillOpacity: 0.15, weight: 3 });
+      }
+    });
+  }
+};
+
+// ============================================================
+// 9. SIDEBAR MODULE
+// ============================================================
+const Sidebar = {
+  renderParcelList() {
+    const list = document.getElementById('parcelList');
+    list.innerHTML = '';
+    parcels.forEach(p => {
+      const item = document.createElement('div');
+      item.className = 'parcel-item';
+      item.dataset.id = p.id;
+      item.innerHTML = `
+        <div class="parcel-item-color" style="background:${CONFIG.colors.parcel};"></div>
+        <div class="parcel-item-info">
+          <div class="parcel-item-name">${this.escHtml(p.name)}</div>
+          <div class="parcel-item-id">${this.escHtml(p.tunnus)}</div>
+          ${p.areaHa ? `<div class="parcel-item-area">${p.areaHa} ha</div>` : ''}
+        </div>
+        <button class="btn-remove" data-remove="${p.id}" title="Poista">&times;</button>
+      `;
+      item.addEventListener('click', (e) => {
+        if (e.target.closest('.btn-remove')) return;
+        MapManager.fitBounds(p.bounds);
+        ParcelManager.highlight(p.id);
+        this.setActiveParcel(p.id);
+      });
+      list.appendChild(item);
+    });
+
+    // Remove button handlers
+    list.querySelectorAll('.btn-remove').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const id = btn.dataset.remove;
+        ParcelManager.remove(id);
+        this.renderParcelList();
+        App.saveState();
+        if (parcels.length === 0) {
+          document.getElementById('neighborsSection').style.display = 'none';
+          document.getElementById('priceSection').style.display = 'none';
+          document.getElementById('statsSection').style.display = 'none';
+          document.getElementById('historicalSection').style.display = 'none';
+        }
+        this.showMsg(t('removedParcel'), 'info');
+      });
+    });
+  },
+
+  setActiveParcel(id) {
+    document.querySelectorAll('.parcel-item').forEach(el => {
+      el.classList.toggle('active', el.dataset.id === id);
+    });
+  },
+
+  showMsg(text, type = 'info') {
+    const el = document.getElementById('parcelMsg');
+    el.innerHTML = `<div class="msg msg-${type}">${this.escHtml(text)}</div>`;
+    setTimeout(() => { el.innerHTML = ''; }, 5000);
+  },
+
+  escHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  },
+
+  renderNeighbors(neighbors) {
+    const section = document.getElementById('neighborsSection');
+    const list = document.getElementById('neighborsList');
+    if (!neighbors || neighbors.length === 0) {
+      list.textContent = t('noNeighbors');
+      section.style.display = 'block';
+      return;
+    }
+    section.style.display = 'block';
+    list.textContent = `${neighbors.length} ${t('neighborsLoaded')}`;
+  },
+
+  renderPriceChart(priceData, municipalityCode) {
+    const section = document.getElementById('priceSection');
+    section.style.display = 'block';
+    document.getElementById('priceInfo').textContent = `${t('priceFor')} ${municipalityCode}`;
+    ChartModule.render(priceData);
+  },
+
+  renderStatsTable(priceData) {
+    const section = document.getElementById('statsSection');
+    section.style.display = 'block';
+
+    const median = KhrApi.parseIndicatorData(priceData.median);
+    const avg = KhrApi.parseIndicatorData(priceData.avg);
+    const count = KhrApi.parseIndicatorData(priceData.count);
+
+    // Merge by year
+    const years = new Set([...median.map(d => d.year), ...avg.map(d => d.year)]);
+    const rows = [];
+    years.forEach(year => {
+      const m = median.find(d => d.year === year);
+      const a = avg.find(d => d.year === year);
+      const c = count.find(d => d.year === year);
+      rows.push({
+        year,
+        median: m ? m.value : null,
+        avg: a ? a.value : null,
+        count: c ? c.value : null,
+      });
+    });
+    rows.sort((a, b) => b.year - a.year);
+
+    const tbody = document.getElementById('statsBody');
+    tbody.innerHTML = '';
+    rows.forEach(r => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${r.year}</td>
+        <td>${r.median != null ? Math.round(r.median).toLocaleString('fi-FI') : '-'}</td>
+        <td>${r.avg != null ? Math.round(r.avg).toLocaleString('fi-FI') : '-'}</td>
+        <td>${r.count != null ? r.count : '-'}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    // Sortable headers
+    document.querySelectorAll('#statsTable th[data-sort]').forEach(th => {
+      th.onclick = () => {
+        const key = th.dataset.sort;
+        const dir = th.dataset.dir === 'asc' ? 'desc' : 'asc';
+        th.dataset.dir = dir;
+        const sorted = [...rows].sort((a, b) => dir === 'asc' ? (a[key] ?? 0) - (b[key] ?? 0) : (b[key] ?? 0) - (a[key] ?? 0));
+        tbody.innerHTML = '';
+        sorted.forEach(r => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `
+            <td>${r.year}</td>
+            <td>${r.median != null ? Math.round(r.median).toLocaleString('fi-FI') : '-'}</td>
+            <td>${r.avg != null ? Math.round(r.avg).toLocaleString('fi-FI') : '-'}</td>
+            <td>${r.count != null ? r.count : '-'}</td>
+          `;
+          tbody.appendChild(tr);
+        });
+      };
+    });
+
+    App.currentPriceData = priceData;
+    App.currentStatsRows = rows;
+  },
+
+  showHistoricalControls() {
+    document.getElementById('historicalSection').style.display = 'block';
+  }
+};
+
+// ============================================================
+// 10. CHART MODULE
+// ============================================================
+let priceChartInstance = null;
+
+const ChartModule = {
+  render(priceData) {
+    const ctx = document.getElementById('priceChart').getContext('2d');
+    const median = KhrApi.parseIndicatorData(priceData.median);
+    const avg = KhrApi.parseIndicatorData(priceData.avg);
+
+    if (priceChartInstance) priceChartInstance.destroy();
+
+    const labels = median.map(d => d.year);
+    const datasets = [];
+
+    if (median.length > 0) {
+      datasets.push({
+        label: t('colMedian'),
+        data: median.map(d => d.value),
+        borderColor: CONFIG.colors.parcel,
+        backgroundColor: 'rgba(45,106,79,0.1)',
+        fill: true,
+        tension: 0.3,
+        pointRadius: 3,
+        pointHoverRadius: 6,
+      });
+    }
+
+    if (avg.length > 0) {
+      datasets.push({
+        label: t('colAvg'),
+        data: avg.map(d => d.value),
+        borderColor: CONFIG.colors.neighbor,
+        backgroundColor: 'transparent',
+        borderDash: [5, 5],
+        tension: 0.3,
+        pointRadius: 2,
+        pointHoverRadius: 5,
+      });
+    }
+
+    if (datasets.length === 0) {
+      document.getElementById('priceInfo').textContent = t('noData');
+      return;
+    }
+
+    priceChartInstance = new Chart(ctx, {
+      type: 'line',
+      data: { labels, datasets },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: { mode: 'index', intersect: false },
+        plugins: {
+          legend: { position: 'bottom', labels: { font: { family: 'Inter', size: 11 }, boxWidth: 20 } },
+          tooltip: {
+            callbacks: {
+              label: (ctx) => `${ctx.dataset.label}: ${Math.round(ctx.parsed.y).toLocaleString('fi-FI')} EUR/ha`
+            }
+          }
+        },
+        scales: {
+          x: { grid: { display: false }, ticks: { font: { size: 10 } } },
+          y: { ticks: { font: { size: 10 }, callback: v => v.toLocaleString('fi-FI') }, grid: { color: '#eee' } }
+        }
+      }
+    });
+  }
+};
+
+// ============================================================
+// 11. MEASURE TOOLS
+// ============================================================
+let measureMode = null; // 'distance' | 'area' | null
+let measurePoints = [];
+let measureLayer = null;
+let measureMarkers = [];
+
+const MeasureTools = {
+  activate(mode) {
+    this.clear();
+    measureMode = mode;
+    document.getElementById('btnMeasureDist').classList.toggle('active', mode === 'distance');
+    document.getElementById('btnMeasureArea').classList.toggle('active', mode === 'area');
+    map.getContainer().style.cursor = 'crosshair';
+    Sidebar.showMsg(t('clickToMeasure'), 'info');
+  },
+
+  clear() {
+    measureMode = null;
+    measurePoints = [];
+    if (measureLayer) { map.removeLayer(measureLayer); measureLayer = null; }
+    measureMarkers.forEach(m => map.removeLayer(m));
+    measureMarkers = [];
+    document.getElementById('btnMeasureDist').classList.remove('active');
+    document.getElementById('btnMeasureArea').classList.remove('active');
+    document.getElementById('measureResult').style.display = 'none';
+    map.getContainer().style.cursor = '';
+  },
+
+  addPoint(latlng) {
+    measurePoints.push(latlng);
+    const marker = L.circleMarker(latlng, {
+      radius: 5, color: CONFIG.colors.measure, fillColor: CONFIG.colors.measure, fillOpacity: 1, weight: 2
+    }).addTo(map);
+    measureMarkers.push(marker);
+    this.redraw();
+  },
+
+  finish() {
+    if (measureMode === 'distance' && measurePoints.length >= 2) {
+      let totalDist = 0;
+      for (let i = 1; i < measurePoints.length; i++) {
+        totalDist += measurePoints[i - 1].distanceTo(measurePoints[i]);
+      }
+      this.showResult(t('measureDist'), this.formatDistance(totalDist));
+    } else if (measureMode === 'area' && measurePoints.length >= 3) {
+      const area = this.computeArea(measurePoints);
+      this.showResult(t('measureArea'), this.formatArea(area));
+    }
+    map.getContainer().style.cursor = '';
+    measureMode = null;
+    document.getElementById('btnMeasureDist').classList.remove('active');
+    document.getElementById('btnMeasureArea').classList.remove('active');
+  },
+
+  redraw() {
+    if (measureLayer) map.removeLayer(measureLayer);
+    if (measurePoints.length < 2) return;
+    const opts = { color: CONFIG.colors.measure, weight: 2, dashArray: '8,6', fillColor: 'rgba(230,57,70,0.1)', fillOpacity: 0.1 };
+    if (measureMode === 'area') {
+      measureLayer = L.polygon(measurePoints, opts).addTo(map);
+    } else {
+      measureLayer = L.polyline(measurePoints, opts).addTo(map);
+    }
+  },
+
+  computeArea(points) {
+    // Convert to EPSG:3067 for accurate area calculation (shoelace formula)
+    if (!proj4.defs('EPSG:3067')) {
+      proj4.defs('EPSG:3067', '+proj=utm +zone=35 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs');
+    }
+    const coords = points.map(p => proj4('EPSG:4326', 'EPSG:3067', [p.lng, p.lat]));
+    let area = 0;
+    const n = coords.length;
+    for (let i = 0; i < n; i++) {
+      const j = (i + 1) % n;
+      area += coords[i][0] * coords[j][1];
+      area -= coords[j][0] * coords[i][1];
+    }
+    return Math.abs(area) / 2;
+  },
+
+  formatDistance(meters) {
+    return meters >= 1000 ? `${(meters / 1000).toFixed(2)} km` : `${Math.round(meters)} m`;
+  },
+
+  formatArea(sqMeters) {
+    if (sqMeters >= 10000) return `${(sqMeters / 10000).toFixed(2)} ha`;
+    return `${Math.round(sqMeters)} m\u00B2`;
+  },
+
+  showResult(label, value) {
+    document.getElementById('measureLabel').textContent = label;
+    document.getElementById('measureValue').textContent = value;
+    document.getElementById('measureResult').style.display = 'block';
+  }
+};
+
+// ============================================================
+// 12. EXPORT MODULE
+// ============================================================
+const ExportModule = {
+  async exportPdf() {
+    Sidebar.showMsg(t('pdfGenerating'), 'info');
+    try {
+      // Create a temporary container for PDF content
+      const container = document.createElement('div');
+      container.style.cssText = 'width:210mm; padding:15mm; font-family:Inter,sans-serif; color:#1a1a1a;';
+
+      // Title
+      container.innerHTML = `
+        <h1 style="color:#2d6a4f; margin-bottom:8px; font-size:22px;">${Sidebar.escHtml(t('pdfTitle'))}</h1>
+        <p style="color:#6c757d; font-size:12px; margin-bottom:20px;">${new Date().toLocaleDateString('fi-FI')}</p>
+      `;
+
+      // Parcels table
+      if (parcels.length > 0) {
+        let html = `<h2 style="font-size:15px; color:#2d6a4f; margin:16px 0 8px;">${t('parcelsTitle')}</h2>`;
+        html += '<table style="width:100%; border-collapse:collapse; font-size:12px;">';
+        html += `<tr style="background:#f8f9fa;"><th style="padding:6px 8px; text-align:left; border-bottom:2px solid #dee2e6;">${t('parcelLabel')}</th><th style="padding:6px 8px; text-align:left; border-bottom:2px solid #dee2e6;">Nimi</th><th style="padding:6px 8px; text-align:left; border-bottom:2px solid #dee2e6;">${t('areaLabel')}</th></tr>`;
+        parcels.forEach(p => {
+          html += `<tr><td style="padding:5px 8px; border-bottom:1px solid #eee;">${Sidebar.escHtml(p.tunnus)}</td><td style="padding:5px 8px; border-bottom:1px solid #eee;">${Sidebar.escHtml(p.name)}</td><td style="padding:5px 8px; border-bottom:1px solid #eee;">${p.areaHa ? p.areaHa + ' ha' : '-'}</td></tr>`;
+        });
+        html += '</table>';
+        container.innerHTML += html;
+      }
+
+      // Price chart (clone canvas)
+      const chartCanvas = document.getElementById('priceChart');
+      if (chartCanvas && priceChartInstance) {
+        container.innerHTML += `<h2 style="font-size:15px; color:#2d6a4f; margin:20px 0 8px;">${t('priceTitle')}</h2>`;
+        const img = document.createElement('img');
+        img.src = chartCanvas.toDataURL('image/png');
+        img.style.cssText = 'width:100%; max-height:200px; object-fit:contain;';
+        container.appendChild(img);
+      }
+
+      // Stats table
+      if (App.currentStatsRows && App.currentStatsRows.length > 0) {
+        let html = `<h2 style="font-size:15px; color:#2d6a4f; margin:20px 0 8px;">${t('statsTitle')}</h2>`;
+        html += '<table style="width:100%; border-collapse:collapse; font-size:11px;">';
+        html += `<tr style="background:#f8f9fa;"><th style="padding:4px 6px; text-align:left; border-bottom:2px solid #dee2e6;">${t('colYear')}</th><th style="padding:4px 6px; text-align:left; border-bottom:2px solid #dee2e6;">${t('colMedian')}</th><th style="padding:4px 6px; text-align:left; border-bottom:2px solid #dee2e6;">${t('colAvg')}</th><th style="padding:4px 6px; text-align:left; border-bottom:2px solid #dee2e6;">${t('colCount')}</th></tr>`;
+        App.currentStatsRows.forEach(r => {
+          html += `<tr><td style="padding:3px 6px; border-bottom:1px solid #eee;">${r.year}</td><td style="padding:3px 6px; border-bottom:1px solid #eee;">${r.median != null ? Math.round(r.median).toLocaleString('fi-FI') : '-'}</td><td style="padding:3px 6px; border-bottom:1px solid #eee;">${r.avg != null ? Math.round(r.avg).toLocaleString('fi-FI') : '-'}</td><td style="padding:3px 6px; border-bottom:1px solid #eee;">${r.count ?? '-'}</td></tr>`;
+        });
+        html += '</table>';
+        container.innerHTML += html;
+      }
+
+      // Footer
+      container.innerHTML += `<p style="margin-top:24px; font-size:10px; color:#adb5bd; text-align:center;">Metsavahti &mdash; ${new Date().toISOString()}</p>`;
+
+      document.body.appendChild(container);
+      await html2pdf().set({
+        margin: 0,
+        filename: 'metsavahti_raportti.pdf',
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+      }).from(container).save();
+      document.body.removeChild(container);
+
+      Sidebar.showMsg(t('pdfDone'), 'success');
+    } catch (e) {
+      console.error('PDF export error:', e);
+      Sidebar.showMsg(t('errorFetch'), 'error');
+    }
+  },
+
+  exportCsv() {
+    if (!App.currentStatsRows || App.currentStatsRows.length === 0) {
+      Sidebar.showMsg(t('noData'), 'info');
+      return;
+    }
+
+    // UTF-8 BOM + semicolon separator for Finnish Excel
+    const bom = '\uFEFF';
+    const header = [t('colYear'), t('colMedian'), t('colAvg'), t('colCount')].join(';');
+    const rows = App.currentStatsRows.map(r =>
+      [r.year, r.median ?? '', r.avg ?? '', r.count ?? ''].join(';')
+    );
+    const csv = bom + header + '\n' + rows.join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = t('csvFilename');
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+};
+
+// ============================================================
+// 13. SWIPE COMPARISON
+// ============================================================
+const SwipeModule = {
+  active: false,
+  position: 50, // percentage
+
+  activate(historicalOverlay) {
+    if (!historicalOverlay) return;
+    this.active = true;
+    const container = document.getElementById('swipeContainer');
+    const handle = document.getElementById('swipeHandle');
+    container.style.display = 'block';
+    this.position = 50;
+    this.updatePosition();
+
+    // Clip the historical overlay
+    this.historicalOverlay = historicalOverlay;
+    this.updateClip();
+
+    // Drag handling
+    let dragging = false;
+    const onMove = (e) => {
+      if (!dragging) return;
+      const rect = container.getBoundingClientRect();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      this.position = Math.max(5, Math.min(95, ((clientX - rect.left) / rect.width) * 100));
+      this.updatePosition();
+      this.updateClip();
+    };
+    const onUp = () => { dragging = false; };
+
+    handle.onmousedown = () => { dragging = true; };
+    handle.ontouchstart = () => { dragging = true; };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('touchmove', onMove);
+    document.addEventListener('mouseup', onUp);
+    document.addEventListener('touchend', onUp);
+
+    this._cleanup = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      document.removeEventListener('touchend', onUp);
+    };
+  },
+
+  updatePosition() {
+    const handle = document.getElementById('swipeHandle');
+    const container = document.getElementById('swipeContainer');
+    handle.style.left = `${this.position}%`;
+    container.style.setProperty('--swipe-pos', `${this.position}%`);
+  },
+
+  updateClip() {
+    if (this.historicalOverlay && this.historicalOverlay._image) {
+      // Clip the historical image to the right side of the handle
+      const pct = this.position;
+      this.historicalOverlay._image.style.clipPath = `inset(0 0 0 ${pct}%)`;
+    }
+  },
+
+  deactivate() {
+    this.active = false;
+    document.getElementById('swipeContainer').style.display = 'none';
+    if (this.historicalOverlay && this.historicalOverlay._image) {
+      this.historicalOverlay._image.style.clipPath = '';
+    }
+    if (this._cleanup) this._cleanup();
+  }
+};
+
+// ============================================================
+// 14. APP INIT
+// ============================================================
+const App = {
+  currentPriceData: null,
+  currentStatsRows: null,
+
+  init() {
+    // Init map
+    MapManager.init();
+
+    // Restore state from hash
+    const state = HashState.decode();
+    if (state) {
+      if (state.lang) { currentLang = state.lang; }
+      if (state.apiKey) { document.getElementById('apiKeyInput').value = state.apiKey; }
+      // Restore parcels (will re-fetch from API)
+      if (state.parcels && state.parcels.length > 0 && state.apiKey) {
+        state.parcels.forEach(p => {
+          this.addParcelAsync(p.tunnus, p.name);
+        });
+      }
+    }
+
+    applyI18n();
+    this.wireEvents();
+  },
+
+  wireEvents() {
+    // Language toggle
+    document.getElementById('btnLangFi').addEventListener('click', () => {
+      currentLang = 'fi'; applyI18n(); this.saveState();
+      if (priceChartInstance && App.currentPriceData) ChartModule.render(App.currentPriceData);
+    });
+    document.getElementById('btnLangEn').addEventListener('click', () => {
+      currentLang = 'en'; applyI18n(); this.saveState();
+      if (priceChartInstance && App.currentPriceData) ChartModule.render(App.currentPriceData);
+    });
+
+    // API key - save on change
+    document.getElementById('apiKeyInput').addEventListener('change', () => this.saveState());
+    document.getElementById('apiKeyInput').addEventListener('input', () => {
+      clearTimeout(this._apiKeyTimer);
+      this._apiKeyTimer = setTimeout(() => this.saveState(), 1000);
+    });
+
+    // Add parcel
+    document.getElementById('btnAddParcel').addEventListener('click', () => this.handleAddParcel());
+    document.getElementById('parcelIdInput').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') this.handleAddParcel();
+    });
+
+    // Sidebar toggle
+    document.getElementById('sidebarToggle').addEventListener('click', () => {
+      document.getElementById('sidebar').classList.toggle('collapsed');
+    });
+
+    // Measurement tools
+    document.getElementById('btnMeasureDist').addEventListener('click', () => {
+      if (measureMode === 'distance') { MeasureTools.clear(); } else { MeasureTools.activate('distance'); }
+    });
+    document.getElementById('btnMeasureArea').addEventListener('click', () => {
+      if (measureMode === 'area') { MeasureTools.clear(); } else { MeasureTools.activate('area'); }
+    });
+    document.getElementById('btnMeasureClear').addEventListener('click', () => MeasureTools.clear());
+    document.getElementById('btnCloseMeasure').addEventListener('click', () => MeasureTools.clear());
+
+    // Map click for measurement
+    map.on('click', (e) => {
+      if (measureMode) { MeasureTools.addPoint(e.latlng); }
+    });
+    map.on('dblclick', (e) => {
+      if (measureMode) {
+        e.originalEvent.preventDefault();
+        MeasureTools.finish();
+      }
+    });
+
+    // Historical imagery
+    document.getElementById('yearSlider').addEventListener('input', (e) => {
+      document.getElementById('yearLabel').textContent = e.target.value;
+    });
+    document.getElementById('btnLoadHistorical').addEventListener('click', () => this.handleLoadHistorical());
+    document.getElementById('btnSwipeCompare').addEventListener('click', () => {
+      if (SwipeModule.active) {
+        SwipeModule.deactivate();
+        document.getElementById('btnSwipeCompare').textContent = t('swipeCompare');
+      } else if (HistoricalImagery.currentOverlay) {
+        SwipeModule.activate(HistoricalImagery.currentOverlay);
+        document.getElementById('btnSwipeCompare').textContent = '✕ ' + t('swipeCompare');
+      }
+    });
+
+    // Export
+    document.getElementById('btnExportPdf').addEventListener('click', () => ExportModule.exportPdf());
+    document.getElementById('btnExportCsv').addEventListener('click', () => ExportModule.exportCsv());
+  },
+
+  getApiKey() {
+    return document.getElementById('apiKeyInput').value.trim();
+  },
+
+  async handleAddParcel() {
+    const apiKey = this.getApiKey();
+    if (!apiKey) { Sidebar.showMsg(t('errorNoKey'), 'error'); return; }
+
+    const tunnus = document.getElementById('parcelIdInput').value.trim();
+    if (!tunnus) { Sidebar.showMsg(t('errorNoId'), 'error'); return; }
+
+    const name = document.getElementById('parcelNameInput').value.trim();
+    await this.addParcelAsync(tunnus, name);
+    document.getElementById('parcelIdInput').value = '';
+    document.getElementById('parcelNameInput').value = '';
+  },
+
+  async addParcelAsync(tunnus, name) {
+    const apiKey = this.getApiKey();
+    if (!apiKey) return;
+
+    const btn = document.getElementById('btnAddParcel');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>';
+
+    try {
+      const geojson = await MmlApi.fetchParcel(tunnus, apiKey);
+      const parcel = ParcelManager.add(tunnus, name || tunnus, geojson);
+      Sidebar.renderParcelList();
+
+      // Zoom to all parcels
+      const allBounds = ParcelManager.getAllBounds();
+      MapManager.fitBounds(allBounds);
+
+      // Show historical controls
+      Sidebar.showHistoricalControls();
+
+      // Fetch neighbors
+      this.fetchNeighbors(parcel);
+
+      // Fetch price data
+      this.fetchPriceData(parcel.municipalityCode);
+
+      this.saveState();
+      Sidebar.showMsg(t('added'), 'success');
+    } catch (e) {
+      console.error('Parcel fetch error:', e);
+      if (e.message === 'INVALID_FORMAT') {
+        Sidebar.showMsg(currentLang === 'fi' ? 'Virheellinen kiinteistotunnus. Kayta muotoa 049-401-1-123.' : 'Invalid property ID. Use format 049-401-1-123.', 'error');
+      } else if (e.message === 'NOT_FOUND') {
+        Sidebar.showMsg(t('errorNotFound'), 'error');
+      } else if (e.message.includes('Failed to fetch') || e.name === 'TypeError') {
+        Sidebar.showMsg(t('errorCors'), 'error');
+      } else {
+        Sidebar.showMsg(t('errorFetch') + ` (${e.message})`, 'error');
+      }
+    } finally {
+      btn.disabled = false;
+      btn.textContent = t('addBtn');
+    }
+  },
+
+  async fetchNeighbors(parcel) {
+    const apiKey = this.getApiKey();
+    if (!apiKey || !parcel.palstaId) return;
+
+    try {
+      // Try fetching neighbors using the feature ID from the parcel
+      const feature = parcel.geojson.features[0];
+      const palstaId = feature ? (feature.properties?.palpisteId || feature.id) : null;
+      if (!palstaId) return;
+
+      const data = await MmlApi.fetchNeighbors(palstaId, apiKey);
+      if (!data.features || data.features.length === 0) {
+        Sidebar.renderNeighbors([]);
+        return;
+      }
+
+      // Add neighbor layer
+      if (parcel.neighborLayer) map.removeLayer(parcel.neighborLayer);
+      parcel.neighborLayer = L.geoJSON(data, {
+        style: {
+          color: CONFIG.colors.neighbor,
+          weight: 2,
+          fillColor: CONFIG.colors.neighborFill,
+          fillOpacity: 0.1,
+          dashArray: '4,4',
+        },
+        onEachFeature: (feature, layer) => {
+          const props = feature.properties || {};
+          const id = props.kiinteistotunnus || feature.id || '-';
+          const area = props.pinta_ala ? `${(props.pinta_ala / 10000).toFixed(2)} ha` : (props.pintaAla ? `${(props.pintaAla / 10000).toFixed(2)} ha` : '-');
+          layer.bindPopup(`
+            <div class="neighbor-popup">
+              <b>${t('neighborLabel')}</b><br>
+              ${t('parcelLabel')}: ${id}<br>
+              ${t('areaLabel')}: ${area}
+            </div>
+          `);
+        }
+      }).addTo(map);
+
+      Sidebar.renderNeighbors(data.features);
+    } catch (e) {
+      console.warn('Neighbor fetch error:', e);
+      Sidebar.renderNeighbors([]);
+    }
+  },
+
+  async fetchPriceData(municipalityCode) {
+    try {
+      const data = await KhrApi.fetchForestPrices(municipalityCode);
+      if (data.median || data.avg) {
+        Sidebar.renderPriceChart(data, municipalityCode);
+        Sidebar.renderStatsTable(data);
+      }
+    } catch (e) {
+      console.warn('Price data fetch error:', e);
+    }
+  },
+
+  async handleLoadHistorical() {
+    const apiKey = this.getApiKey();
+    if (!apiKey || parcels.length === 0) return;
+
+    const year = parseInt(document.getElementById('yearSlider').value);
+    const btn = document.getElementById('btnLoadHistorical');
+    const swipeBtn = document.getElementById('btnSwipeCompare');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> ' + t('historicalLoading');
+
+    try {
+      // Use bounds of all parcels
+      const bounds = ParcelManager.getAllBounds();
+      if (!bounds) throw new Error('No bounds');
+
+      const { imageUrl, imageBounds } = await HistoricalImagery.loadImage(bounds, year, apiKey);
+
+      // Remove previous overlay
+      HistoricalImagery.clearOverlay(map);
+      SwipeModule.deactivate();
+
+      // Add new overlay
+      const overlay = L.imageOverlay(imageUrl, imageBounds, { opacity: 0.9, interactive: false }).addTo(map);
+      HistoricalImagery.currentOverlay = overlay;
+
+      swipeBtn.disabled = false;
+      Sidebar.showMsg(`${year}: ${t('historicalLoaded')}`, 'success');
+    } catch (e) {
+      console.error('Historical imagery error:', e);
+      Sidebar.showMsg(t('historicalError'), 'error');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = t('loadHistorical');
+    }
+  },
+
+  saveState() {
+    const state = {
+      lang: currentLang,
+      apiKey: this.getApiKey(),
+      parcels: parcels.map(p => ({ tunnus: p.tunnus, name: p.name })),
+    };
+    HashState.save(state);
+  }
+};
+
+// Boot
+document.addEventListener('DOMContentLoaded', () => App.init());
+
+})();
+</script>
+</body>
+</html>
